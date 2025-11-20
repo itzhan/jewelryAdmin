@@ -82,9 +82,8 @@ const StoneCutGradesPage = () => {
 
   const columns = [
     { colKey: 'id', title: 'ID', width: 80 },
-    { colKey: 'code', title: '编码', width: 120 },
-    { colKey: 'displayName', title: '显示名称', width: 140 },
-    { colKey: 'description', title: '描述', ellipsis: true },
+    { colKey: 'displayName', title: '名称', width: 140 },
+    { colKey: 'description', title: '描述', width: 160, ellipsis: true },
     { colKey: 'displayOrder', title: '排序', width: 100 },
     {
       colKey: 'isActive',
@@ -158,10 +157,10 @@ const StoneCutGradesPage = () => {
             <Input placeholder='例如 excellent' />
           </FormItem>
           <FormItem
-            label='显示名称'
+            label='名称'
             name='displayName'
             initialData={editing?.displayName}
-            rules={[{ required: true, message: '请输入显示名称', type: 'error' }]}
+            rules={[{ required: true, message: '请输入名称', type: 'error' }]}
           >
             <Input />
           </FormItem>

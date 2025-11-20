@@ -40,7 +40,7 @@ const routes: IRouter[] = [
   },
   {
     path: '/',
-    redirect: '/manage/stones',
+    redirect: '/stone-manage/stones',
   },
 ];
 

@@ -82,8 +82,8 @@ const StoneCertificatesPage = () => {
 
   const columns = [
     { colKey: 'id', title: 'ID', width: 80 },
-    { colKey: 'code', title: '编码', width: 120 },
-    { colKey: 'displayName', title: '显示名称', width: 160 },
+    { colKey: 'displayName', title: '名称', width: 160 },
+    { colKey: 'description', title: '描述', width: 180 },
     {
       colKey: 'website',
       title: '官网',
@@ -185,12 +185,15 @@ const StoneCertificatesPage = () => {
             <Input placeholder='例如 GIA' />
           </FormItem>
           <FormItem
-            label='显示名称'
+            label='名称'
             name='displayName'
             initialData={editing?.displayName}
-            rules={[{ required: true, message: '请输入显示名称', type: 'error' }]}
+            rules={[{ required: true, message: '请输入名称', type: 'error' }]}
           >
             <Input />
+          </FormItem>
+          <FormItem label='描述' name='description' initialData={editing?.description}>
+            <Input placeholder='可选，用于解释证书机构' />
           </FormItem>
           <FormItem label='官网地址' name='website' initialData={editing?.website}>
             <Input placeholder='例如 https://www.gia.edu' />

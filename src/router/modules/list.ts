@@ -4,9 +4,9 @@ import { IRouter } from '../index';
 
 const result: IRouter[] = [
   {
-    path: '/manage',
+    path: '/stone-manage',
     meta: {
-      title: '数据表管理',
+      title: '石头管理',
       Icon: ViewModuleIcon,
     },
     children: [
@@ -40,20 +40,29 @@ const result: IRouter[] = [
         Component: lazy(() => import('pages/List/Stones')),
         meta: { title: '石头表（stones）' },
       },
+    ],
+  },
+  {
+    path: '/product-manage',
+    meta: {
+      title: '产品管理',
+      Icon: ViewModuleIcon,
+    },
+    children: [
       {
         path: 'product-categories',
         Component: lazy(() => import('pages/Products/Categories')),
         meta: { title: '产品类型表（product_categories）' },
       },
       {
+        path: 'materials',
+        Component: lazy(() => import('pages/Products/Materials')),
+        meta: { title: '材料表（materials）' },
+      },
+      {
         path: 'products',
         Component: lazy(() => import('pages/Products/List')),
         meta: { title: '产品表（products）' },
-      },
-      {
-        path: 'product-images',
-        Component: lazy(() => import('pages/Products/Images')),
-        meta: { title: '产品图片表（product_images）' },
       },
     ],
   },

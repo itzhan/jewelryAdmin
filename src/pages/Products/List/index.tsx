@@ -1,5 +1,21 @@
 import React, { memo, useEffect, useRef, useState } from 'react';
-import { Card, Select, Table, Row, Col, Button, Tag, Image, Dialog, Form, Input, InputNumber, Switch, MessagePlugin } from 'tdesign-react';
+import {
+  Card,
+  Select,
+  Table,
+  Row,
+  Col,
+  Button,
+  Tag,
+  Image,
+  Dialog,
+  Form,
+  Input,
+  InputNumber,
+  Switch,
+  MessagePlugin,
+  Radio,
+} from 'tdesign-react';
 import classnames from 'classnames';
 import {
   getProductCategories,
@@ -11,6 +27,9 @@ import {
   updateProduct,
   deleteProduct,
   ProductPayload,
+  ProductDetail,
+  ProductImageDetail,
+  getProductDetail,
 } from 'services/backend';
 import CommonStyle from 'styles/common.module.less';
 
@@ -27,14 +46,15 @@ const ProductListPage = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(12);
   const [total, setTotal] = useState(0);
-   const [formVisible, setFormVisible] = useState(false);
-   const [saving, setSaving] = useState(false);
-   const [editing, setEditing] = useState<ProductListItem | null>(null);
-   const formRef = useRef<FormInstanceFunctions>();
+  const [formVisible, setFormVisible] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState<ProductListItem | null>(null);
+  const formRef = useRef<FormInstanceFunctions>();
+  const [images, setImages] = useState<ProductImageDetail[]>([]);
 
   const loadCategories = async () => {
-    const data = await getProductCategories();
-    setCategories(data);
+    const response = await getProductCategories();
+    setCategories(response.items);
   };
 
   const loadList = async (extraParams?: Partial<ProductListParams>) => {
@@ -71,12 +91,25 @@ const ProductListPage = () => {
 
   const handleAdd = () => {
     setEditing(null);
+    setImages([]);
     setFormVisible(true);
   };
 
-  const handleEdit = (record: ProductListItem) => {
+  const handleEdit = async (record: ProductListItem) => {
     setEditing(record);
     setFormVisible(true);
+    try {
+      const detail: ProductDetail = await getProductDetail(record.id);
+      const detailImages = (detail.images || []).map((img, index) => ({
+        ...img,
+        sortOrder: typeof img.sortOrder === 'number' ? img.sortOrder : index,
+        isPrimary: typeof img.isPrimary === 'boolean' ? img.isPrimary : index === 0,
+      }));
+      setImages(detailImages);
+    } catch (e) {
+      setImages([]);
+      MessagePlugin.error('加载产品详情失败');
+    }
   };
 
   const handleDelete = async (record: ProductListItem) => {
@@ -114,12 +147,24 @@ const ProductListPage = () => {
       isCustomizable: values.isCustomizable,
     };
 
+    const normalizedImages = images
+      .filter((img) => img.url)
+      .map((img, index) => ({
+        imageUrl: img.url,
+        altText: img.alt || '',
+        badge: img.badge || undefined,
+        aspectRatio: img.aspect || 'square',
+        sortOrder: typeof img.sortOrder === 'number' ? img.sortOrder : index,
+        isPrimary: !!img.isPrimary,
+      }));
+
     try {
       setSaving(true);
       if (editing) {
         // 更新时 description 可选，如果留空则不覆盖原值
         const updatePayload: Partial<ProductPayload> = {
           ...basePayload,
+          images: normalizedImages,
         };
         if (values.description) {
           updatePayload.description = values.description;
@@ -130,6 +175,7 @@ const ProductListPage = () => {
         const createPayload: ProductPayload = {
           ...(basePayload as ProductPayload),
           description: values.description,
+          images: normalizedImages,
         };
         if (!createPayload.description) {
           MessagePlugin.error('请输入描述');
@@ -148,12 +194,54 @@ const ProductListPage = () => {
     }
   };
 
+  const handleAddImage = () => {
+    setImages((prev) => {
+      const nextIndex = prev.length;
+      return [
+        ...prev,
+        {
+          url: '',
+          alt: '',
+          badge: '',
+          aspect: 'square',
+          sortOrder: nextIndex,
+          isPrimary: prev.length === 0,
+        },
+      ];
+    });
+  };
+
+  const handleUpdateImage = (index: number, field: keyof ProductImageDetail, value: any) => {
+    setImages((prev) => {
+      const next = [...prev];
+      next[index] = {
+        ...next[index],
+        [field]: value,
+      };
+      return next;
+    });
+  };
+
+  const handleDeleteImage = (index: number) => {
+    setImages((prev) => {
+      const next = prev
+        .filter((_, i) => i !== index)
+        .map((img, i) => ({
+          ...img,
+          sortOrder: i,
+        }));
+      if (next.length > 0 && !next.some((img) => img.isPrimary)) {
+        next[0] = { ...next[0], isPrimary: true };
+      }
+      return next;
+    });
+  };
+
+  const handleSetPrimaryImage = (index: number) => {
+    setImages((prev) => prev.map((img, i) => ({ ...img, isPrimary: i === index })));
+  };
+
   const columns = [
-    {
-      colKey: 'id',
-      title: 'ID',
-      width: 80,
-    },
     {
       colKey: 'categoryName',
       title: '类型',
@@ -298,7 +386,7 @@ const ProductListPage = () => {
             current: page,
             total,
             showJumper: true,
-            onChange: (current, pageInfo) => {
+            onCurrentChange: (current, pageInfo) => {
               setPage(current);
               setPageSize(pageInfo.pageSize);
               loadList({
@@ -327,13 +415,7 @@ const ProductListPage = () => {
         onConfirm={() => formRef.current?.submit?.()}
         width='700px'
       >
-        <Form
-          ref={formRef}
-          labelWidth={100}
-          onSubmit={onSubmit}
-          colon
-          key={editing ? editing.id : 'new'}
-        >
+        <Form ref={formRef} labelWidth={100} onSubmit={onSubmit} colon key={editing ? editing.id : 'new'}>
           <FormItem
             label='产品类型'
             name='categoryCode'
@@ -397,11 +479,7 @@ const ProductListPage = () => {
             <Input placeholder='请输入图片地址' />
           </FormItem>
 
-          <FormItem
-            label='可选颜色'
-            name='availableColors'
-            initialData={editing?.colors?.join(',')}
-          >
+          <FormItem label='可选颜色' name='availableColors' initialData={editing?.colors?.join(',')}>
             <Input placeholder='以英文逗号分隔，例如 white,yellow,rose' />
           </FormItem>
 
@@ -425,6 +503,99 @@ const ProductListPage = () => {
 
           <FormItem label='描述' name='description'>
             <Input placeholder='请输入产品描述' />
+          </FormItem>
+
+          <FormItem label='图片管理'>
+            <div style={{ width: '100%' }}>
+              {images.length === 0 ? (
+                <div style={{ marginBottom: 12, color: '#999' }}>暂无图片，请点击下方“新增图片”按钮添加。</div>
+              ) : (
+                images.map((img, index) => (
+                  <Row
+                    key={index}
+                    gutter={[16, 8]}
+                    style={{
+                      marginBottom: 12,
+                      paddingBottom: 12,
+                      borderBottom: '1px dashed #eee',
+                    }}
+                  >
+                    <Col span={3}>
+                      {img.url ? (
+                        <Image src={img.url} style={{ width: '100%', height: 80, objectFit: 'cover' }} fit='cover' />
+                      ) : (
+                        <div
+                          style={{
+                            width: '100%',
+                            height: 80,
+                            border: '1px dashed #ddd',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#bbb',
+                            fontSize: 12,
+                          }}
+                        >
+                          无预览
+                        </div>
+                      )}
+                    </Col>
+                    <Col span={5}>
+                      <Input
+                        value={img.url}
+                        placeholder='图片 URL'
+                        onChange={(value) => handleUpdateImage(index, 'url', value)}
+                      />
+                    </Col>
+                    <Col span={4}>
+                      <Input
+                        value={img.alt}
+                        placeholder='ALT 文本'
+                        onChange={(value) => handleUpdateImage(index, 'alt', value)}
+                      />
+                    </Col>
+                    <Col span={4}>
+                      <Input
+                        value={img.badge}
+                        placeholder='角标，如 NEW'
+                        onChange={(value) => handleUpdateImage(index, 'badge', value)}
+                      />
+                    </Col>
+                    <Col span={3}>
+                      <Select
+                        value={img.aspect || 'square'}
+                        onChange={(value) => handleUpdateImage(index, 'aspect', value as ProductImageDetail['aspect'])}
+                      >
+                        <Option value='square' label='方形' />
+                        <Option value='portrait' label='竖图' />
+                      </Select>
+                    </Col>
+                    <Col span={2}>
+                      <InputNumber
+                        min={0}
+                        value={typeof img.sortOrder === 'number' ? img.sortOrder : index}
+                        onChange={(value) =>
+                          handleUpdateImage(index, 'sortOrder', typeof value === 'number' ? value : undefined)
+                        }
+                      />
+                    </Col>
+                    <Col span={2}>
+                      <Radio checked={!!img.isPrimary} onChange={() => handleSetPrimaryImage(index)}>
+                        主图
+                      </Radio>
+                    </Col>
+                    <Col span={1}>
+                      <Button theme='danger' variant='text' onClick={() => handleDeleteImage(index)}>
+                        删除
+                      </Button>
+                    </Col>
+                  </Row>
+                ))
+              )}
+              <Button theme='primary' variant='outline' size='small' onClick={handleAddImage}>
+                新增图片
+              </Button>
+            </div>
           </FormItem>
         </Form>
       </Dialog>

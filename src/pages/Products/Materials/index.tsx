@@ -1,35 +1,44 @@
 import React, { memo, useEffect, useRef, useState } from 'react';
-import { Card, Table, Tag, Button, Dialog, Form, Input, InputNumber, MessagePlugin } from 'tdesign-react';
-import classnames from 'classnames';
 import {
-  getProductCategories,
-  ProductCategory,
-  createProductCategory,
-  updateProductCategory,
-  deleteProductCategory,
-} from 'services/backend';
+  Card,
+  Table,
+  Tag,
+  Button,
+  Dialog,
+  Form,
+  Input,
+  InputNumber,
+  Switch,
+  MessagePlugin,
+  Textarea,
+} from 'tdesign-react';
+import classnames from 'classnames';
+import { getMaterials, Material, createMaterial, updateMaterial, deleteMaterial } from 'services/backend';
 import CommonStyle from 'styles/common.module.less';
 import { FormInstanceFunctions, SubmitContext } from 'tdesign-react/es/form/type';
 
 const { FormItem } = Form;
 
-const ProductCategoriesPage = () => {
+const MaterialsPage = () => {
   const [loading, setLoading] = useState(false);
-  const [list, setList] = useState<ProductCategory[]>([]);
+  const [list, setList] = useState<Material[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [formVisible, setFormVisible] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [editing, setEditing] = useState<ProductCategory | null>(null);
+  const [editing, setEditing] = useState<Material | null>(null);
   const formRef = useRef<FormInstanceFunctions>();
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const response = await getProductCategories(page, pageSize);
+      const response = await getMaterials(page, pageSize);
       setList(response.items);
       setTotal(response.meta.pagination.total);
+    } catch (e) {
+      console.error('Failed to fetch materials:', e);
+      MessagePlugin.error('加载材料列表失败');
     } finally {
       setLoading(false);
     }
@@ -44,15 +53,15 @@ const ProductCategoriesPage = () => {
     setFormVisible(true);
   };
 
-  const handleEdit = (record: ProductCategory) => {
+  const handleEdit = (record: Material) => {
     setEditing(record);
     setFormVisible(true);
   };
 
-  const handleDelete = async (record: ProductCategory) => {
+  const handleDelete = async (record: Material) => {
     try {
       setLoading(true);
-      await deleteProductCategory(record.id);
+      await deleteMaterial(record.id);
       MessagePlugin.success('删除成功');
       fetchData();
     } catch (e) {
@@ -67,18 +76,20 @@ const ProductCategoriesPage = () => {
     const values = formRef.current?.getFieldsValue?.(true) as {
       code: string;
       name: string;
+      karat?: string;
       description?: string;
+      svgIcon?: string;
       displayOrder?: number;
-      iconSvg?: string;
+      isActive?: boolean;
     };
 
     try {
       setSaving(true);
       if (editing) {
-        await updateProductCategory(editing.id, values);
+        await updateMaterial(editing.id, values);
         MessagePlugin.success('更新成功');
       } else {
-        await createProductCategory(values);
+        await createMaterial(values);
         MessagePlugin.success('创建成功');
       }
       setFormVisible(false);
@@ -102,25 +113,53 @@ const ProductCategoriesPage = () => {
       width: 200,
     },
     {
+      colKey: 'code',
+      title: '编码',
+      width: 180,
+    },
+    {
+      colKey: 'karat',
+      title: '克拉',
+      width: 100,
+      cell({ row }: { row: Material }) {
+        return row.karat || '-';
+      },
+    },
+    {
       colKey: 'displayOrder',
       title: '排序',
       width: 100,
     },
     {
-      colKey: 'iconSvg',
-      title: '图标 SVG',
-      width: 220,
-      ellipsis: true,
-      cell({ row }: { row: ProductCategory }) {
-        if (!row.iconSvg) return '-';
-        return <span style={{ fontSize: 10, color: '#999' }}>{row.iconSvg.slice(0, 40)}...</span>;
+      colKey: 'svgIcon',
+      title: 'SVG 图标',
+      width: 120,
+      cell({ row }: { row: Material }) {
+        if (!row.svgIcon) return '-';
+        return <div style={{ width: 40, height: 40 }} dangerouslySetInnerHTML={{ __html: row.svgIcon }} />;
+      },
+    },
+    {
+      colKey: 'isActive',
+      title: '状态',
+      width: 100,
+      cell({ row }: { row: Material }) {
+        return row.isActive ? (
+          <Tag theme='success' variant='light'>
+            启用
+          </Tag>
+        ) : (
+          <Tag theme='default' variant='outline'>
+            禁用
+          </Tag>
+        );
       },
     },
     {
       colKey: 'description',
       title: '描述',
       ellipsis: true,
-      cell({ row }: { row: ProductCategory }) {
+      cell({ row }: { row: Material }) {
         if (!row.description) return '-';
         return (
           <Tag shape='round' variant='light-outline'>
@@ -133,7 +172,7 @@ const ProductCategoriesPage = () => {
       colKey: 'op',
       title: '操作',
       width: 180,
-      cell({ row }: { row: ProductCategory }) {
+      cell({ row }: { row: Material }) {
         return (
           <>
             <Button theme='primary' variant='text' onClick={() => handleEdit(row)}>
@@ -151,11 +190,11 @@ const ProductCategoriesPage = () => {
   return (
     <div className={classnames(CommonStyle.pageWithPadding, CommonStyle.pageWithColor)}>
       <Card
-        title='产品类型列表'
+        title='材料列表'
         bordered={false}
         actions={
           <Button theme='primary' onClick={handleAdd}>
-            新增类型
+            新增材料
           </Button>
         }
       >
@@ -178,21 +217,22 @@ const ProductCategoriesPage = () => {
       </Card>
 
       <Dialog
-        header={editing ? '编辑产品类型' : '新增产品类型'}
+        header={editing ? '编辑材料' : '新增材料'}
         visible={formVisible}
         confirmBtn={{ content: '保存', loading: saving }}
         cancelBtn='取消'
         onClose={() => setFormVisible(false)}
         onConfirm={() => formRef.current?.submit?.()}
+        width='700px'
       >
-        <Form ref={formRef} labelWidth={80} onSubmit={onSubmit} colon key={editing ? editing.id : 'new'}>
+        <Form ref={formRef} labelWidth={100} onSubmit={onSubmit} colon key={editing ? editing.id : 'new'}>
           <FormItem
             label='编码'
             name='code'
             initialData={editing?.code}
             rules={[{ required: true, message: '请输入编码', type: 'error' }]}
           >
-            <Input placeholder='例如 pendant' />
+            <Input placeholder='例如 white_gold_14k' />
           </FormItem>
           <FormItem
             label='名称'
@@ -200,16 +240,22 @@ const ProductCategoriesPage = () => {
             initialData={editing?.name}
             rules={[{ required: true, message: '请输入名称', type: 'error' }]}
           >
-            <Input placeholder='例如 Pendants' />
+            <Input placeholder='例如 White Gold' />
+          </FormItem>
+          <FormItem label='克拉' name='karat' initialData={editing?.karat}>
+            <Input placeholder='例如 14K, 18K, PT' />
           </FormItem>
           <FormItem label='描述' name='description' initialData={editing?.description}>
-            <Input placeholder='用于说明该类型' />
+            <Input placeholder='用于说明该材料' />
           </FormItem>
-          <FormItem label='图标 SVG' name='iconSvg' initialData={editing?.iconSvg}>
-            <Input placeholder='可选，SVG 代码片段，用于前端图标展示' />
+          <FormItem label='SVG 图标' name='svgIcon' initialData={editing?.svgIcon}>
+            <Textarea placeholder='可选，SVG 代码片段，用于前端图标展示' rows={4} />
           </FormItem>
           <FormItem label='排序' name='displayOrder' initialData={editing?.displayOrder ?? 0}>
             <InputNumber min={0} />
+          </FormItem>
+          <FormItem label='是否启用' name='isActive' initialData={editing?.isActive ?? true}>
+            <Switch />
           </FormItem>
         </Form>
       </Dialog>
@@ -217,4 +263,4 @@ const ProductCategoriesPage = () => {
   );
 };
 
-export default memo(ProductCategoriesPage);
+export default memo(MaterialsPage);

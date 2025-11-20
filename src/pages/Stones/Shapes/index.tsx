@@ -75,9 +75,22 @@ const StoneShapesPage = () => {
 
   const columns = [
     { colKey: 'id', title: 'ID', width: 80 },
-    { colKey: 'code', title: '编码', width: 120 },
-    { colKey: 'displayName', title: '显示名称', width: 160 },
-    { colKey: 'description', title: '描述', ellipsis: true },
+    { colKey: 'displayName', title: '名称', width: 160 },
+    { colKey: 'description', title: '描述', width: 180, ellipsis: true },
+    {
+      colKey: 'iconSvg',
+      title: '图标 SVG',
+      width: 220,
+      ellipsis: true,
+      cell({ row }: { row: StoneShapeItem }) {
+        if (!row.iconSvg) return '-';
+        return (
+          <span style={{ fontSize: 10, color: '#999' }}>
+            {row.iconSvg.slice(0, 40)}...
+          </span>
+        );
+      },
+    },
     { colKey: 'displayOrder', title: '排序', width: 100 },
     {
       colKey: 'isActive',
@@ -152,15 +165,18 @@ const StoneShapesPage = () => {
             <Input placeholder='例如 round' />
           </FormItem>
           <FormItem
-            label='显示名称'
+            label='名称'
             name='displayName'
             initialData={editing?.displayName}
-            rules={[{ required: true, message: '请输入显示名称', type: 'error' }]}
+            rules={[{ required: true, message: '请输入名称', type: 'error' }]}
           >
             <Input placeholder='例如 Round' />
           </FormItem>
           <FormItem label='描述' name='description' initialData={editing?.description}>
             <Input placeholder='可选，用于说明' />
+          </FormItem>
+          <FormItem label='图标 SVG' name='iconSvg' initialData={editing?.iconSvg}>
+            <Input placeholder='可选，SVG 代码片段，用于前端图标展示' />
           </FormItem>
           <FormItem label='排序' name='displayOrder' initialData={editing?.displayOrder ?? 0}>
             <InputNumber min={0} />

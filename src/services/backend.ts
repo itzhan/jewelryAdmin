@@ -8,6 +8,7 @@ const backendInstance = axios.create({
 export interface StoneFilterItem {
   code: string;
   label: string;
+  iconSvg?: string;
 }
 
 export interface StoneFiltersResponse {
@@ -25,6 +26,7 @@ export interface StoneShapeItem {
   code: string;
   displayName: string;
   description?: string;
+  iconSvg?: string;
   displayOrder: number;
   isActive: boolean;
 }
@@ -60,6 +62,7 @@ export interface StoneCertificateItem {
   id: number;
   code: string;
   displayName: string;
+  description?: string;
   website?: string;
   isActive: boolean;
   createdAt: string;
@@ -68,6 +71,7 @@ export interface StoneCertificateItem {
 
 export interface StoneItem {
   id: number;
+  name: string;
   type: StoneType;
   shape: string;
   carat: number;
@@ -119,6 +123,7 @@ export interface StoneListParams {
 }
 
 export interface StonePayload {
+  name: string;
   type: StoneType;
   shapeCode: string;
   carat: number;
@@ -133,7 +138,35 @@ export interface StonePayload {
   price: number;
   currency: string;
   isAvailable?: boolean;
+  images?: StoneImageData[];
 }
+
+export interface StoneImageData {
+  imageUrl: string;
+  altText: string;
+  badge?: string;
+  aspectRatio: 'square' | 'portrait';
+  sortOrder: number;
+  isPrimary: boolean;
+}
+
+export interface StoneImageDetail {
+  url: string;
+  alt: string;
+  badge?: string;
+  aspect: 'square' | 'portrait';
+  sortOrder?: number;
+  isPrimary?: boolean;
+}
+
+export interface StoneDetail extends StoneItem {
+  images: StoneImageDetail[];
+}
+
+export const getStoneDetail = async (id: number) => {
+  const res = await backendInstance.get<{ data: StoneDetail }>(`/stones/${id}`);
+  return res.data.data;
+};
 
 export const getStoneFilters = async () => {
   const res = await backendInstance.get<StoneFiltersApiResponse>('/stones/filters');
@@ -192,6 +225,7 @@ export interface StoneEnumPayload {
   description?: string;
   displayOrder?: number;
   isActive?: boolean;
+  iconSvg?: string;
 }
 
 export interface StoneCertificatePayload extends StoneEnumPayload {
@@ -274,10 +308,44 @@ export interface ProductCategory {
   name: string;
   description?: string;
   displayOrder?: number;
+  iconSvg?: string;
 }
 
+export interface ProductImageDetail {
+  url: string;
+  alt: string;
+  badge?: string;
+  aspect: 'square' | 'portrait';
+  sortOrder?: number;
+  isPrimary?: boolean;
+}
+
+export interface ProductDetail {
+  id: number;
+  name: string;
+  sku: string;
+  basePrice: number;
+  currency: string;
+  description?: string;
+  category: {
+    code: string;
+    name: string;
+  };
+  availableColors?: string[];
+  minCarat?: number;
+  maxCarat?: number;
+  isCustomizable?: boolean;
+  images: ProductImageDetail[];
+}
+
+export const getProductDetail = async (id: number) => {
+  const res = await backendInstance.get<{ data: ProductDetail }>(`/products/${id}`);
+  return res.data.data;
+};
+
 export interface ProductCategoryListApiResponse {
-  data: ProductCategory[];
+  items: ProductCategory[];
+  meta: PaginationMeta;
 }
 
 export interface ProductListItem {
@@ -311,6 +379,7 @@ export interface ProductCategoryPayload {
   name: string;
   description?: string;
   displayOrder?: number;
+  iconSvg?: string;
 }
 
 export interface ProductPayload {
@@ -325,11 +394,14 @@ export interface ProductPayload {
   minCarat?: number;
   maxCarat?: number;
   isCustomizable?: boolean;
+  images?: ProductImageData[];
 }
 
-export const getProductCategories = async () => {
-  const res = await backendInstance.get<ProductCategoryListApiResponse>('/products/categories');
-  return res.data.data;
+export const getProductCategories = async (page?: number, pageSize?: number) => {
+  const res = await backendInstance.get<ProductCategoryListApiResponse>('/products/categories', {
+    params: { page, pageSize },
+  });
+  return res.data;
 };
 
 export const getProductList = async (params: ProductListParams) => {
@@ -367,10 +439,75 @@ export const deleteProduct = async (id: number) => {
   await backendInstance.delete(`/products/${id}`);
 };
 
-export interface ProductImageItem {
+// 图片数据现在作为 JSONB 数组存储在产品中
+export interface ProductImageData {
+  imageUrl: string;
+  altText: string;
+  badge?: string;
+  aspectRatio: 'square' | 'portrait';
+  sortOrder: number;
+  isPrimary: boolean;
+}
+
+// ========== Materials ==========
+
+export interface Material {
   id: number;
-  productId?: number;
-  productName?: string;
+  code: string;
+  name: string;
+  karat?: string;
+  description?: string;
+  svgIcon?: string;
+  displayOrder: number;
+  isActive: boolean;
+}
+
+export interface MaterialListApiResponse {
+  items: Material[];
+  meta: PaginationMeta;
+}
+
+export interface MaterialPayload {
+  code: string;
+  name: string;
+  karat?: string;
+  description?: string;
+  svgIcon?: string;
+  displayOrder?: number;
+  isActive?: boolean;
+}
+
+export const getMaterials = async (page?: number, pageSize?: number) => {
+  const res = await backendInstance.get<MaterialListApiResponse>('/products/materials', {
+    params: { page, pageSize },
+  });
+  return res.data;
+};
+
+export const getMaterialById = async (id: number) => {
+  const res = await backendInstance.get<{ data: Material }>(`/products/materials/${id}`);
+  return res.data.data;
+};
+
+export const createMaterial = async (payload: MaterialPayload) => {
+  const res = await backendInstance.post<{ data: Material }>('/products/materials', payload);
+  return res.data.data;
+};
+
+export const updateMaterial = async (id: number, payload: Partial<MaterialPayload>) => {
+  const res = await backendInstance.patch<{ data: Material }>(`/products/materials/${id}`, payload);
+  return res.data.data;
+};
+
+export const deleteMaterial = async (id: number) => {
+  await backendInstance.delete(`/products/materials/${id}`);
+};
+
+export interface StoneImageItem {
+  id: number;
+  stoneId?: number;
+  stoneName?: string;
+  stoneLabel?: string;
   imageUrl: string;
   altText: string;
   badge?: string;
@@ -380,23 +517,25 @@ export interface ProductImageItem {
   createdAt: string;
 }
 
-export interface ProductImageListApiResponse {
-  data: ProductImageItem[];
+export interface StoneImageListApiResponse {
+  data: StoneImageItem[];
 }
 
-export interface ProductImageListParams {
-  productId?: number;
+export interface StoneImageListParams {
+  stoneId?: number;
+  stoneName?: string;
 }
 
-export const getProductImages = async (params?: ProductImageListParams) => {
-  const res = await backendInstance.get<ProductImageListApiResponse>('/products/images', {
+export const getStoneImages = async (params?: StoneImageListParams) => {
+  const res = await backendInstance.get<StoneImageListApiResponse>('/stones/images', {
     params,
   });
   return res.data.data;
 };
 
-export interface ProductImagePayload {
-  productId: number;
+export interface StoneImagePayload {
+  stoneId?: number;
+  stoneName?: string;
   imageUrl: string;
   altText: string;
   badge?: string;
@@ -405,16 +544,16 @@ export interface ProductImagePayload {
   isPrimary?: boolean;
 }
 
-export const createProductImage = async (payload: ProductImagePayload) => {
-  const res = await backendInstance.post<{ data: ProductImageItem }>('/products/images', payload);
+export const createStoneImage = async (payload: StoneImagePayload) => {
+  const res = await backendInstance.post<{ data: StoneImageItem }>('/stones/images', payload);
   return res.data.data;
 };
 
-export const updateProductImage = async (id: number, payload: Partial<ProductImagePayload>) => {
-  const res = await backendInstance.patch<{ data: ProductImageItem }>(`/products/images/${id}`, payload);
+export const updateStoneImage = async (id: number, payload: Partial<StoneImagePayload>) => {
+  const res = await backendInstance.patch<{ data: StoneImageItem }>(`/stones/images/${id}`, payload);
   return res.data.data;
 };
 
-export const deleteProductImage = async (id: number) => {
-  await backendInstance.delete(`/products/images/${id}`);
+export const deleteStoneImage = async (id: number) => {
+  await backendInstance.delete(`/stones/images/${id}`);
 };
