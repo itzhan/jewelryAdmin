@@ -15,6 +15,8 @@ export interface StoneListFilterState {
   maxCarat?: number;
   minBudget?: number;
   maxBudget?: number;
+  hasImages?: boolean;
+  hasVideo?: boolean;
 }
 
 interface StoneListState {
@@ -40,6 +42,8 @@ const initialState: StoneListState = {
     colors: [],
     clarities: [],
     certificates: [],
+    hasImages: undefined,
+    hasVideo: undefined,
   },
 };
 
@@ -66,6 +70,8 @@ export const fetchStoneList = createAsyncThunk(
       maxBudget: filterValues.maxBudget,
       certificate: filterValues.certificates,
       type: filterValues.type,
+      hasImages: filterValues.hasImages,
+      hasVideo: filterValues.hasVideo,
     };
     const data = await getStoneList(params);
     return data;
@@ -122,4 +128,3 @@ export const { resetStoneListState, setFilterValues, setPagination } = stoneList
 export const selectStoneList = (state: RootState) => state.stoneList;
 
 export default stoneListSlice.reducer;
-

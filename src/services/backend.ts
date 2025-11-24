@@ -2,7 +2,9 @@ import axios from 'axios';
 
 const backendInstance = axios.create({
   baseURL: 'http://localhost:3000',
-  timeout: 5000,
+  timeout: 5 * 60 * 1000, // 5 分钟，避免同步超时
+  maxContentLength: 200 * 1024 * 1024, // 支持大响应体（200MB）
+  maxBodyLength: 200 * 1024 * 1024,
 });
 
 export interface StoneFilterItem {
@@ -82,11 +84,45 @@ export interface StoneItem {
   ratio: number;
   price: number;
   currency: string;
-  lengthMm?: number;
-  widthMm?: number;
-  depthMm?: number;
   isAvailable?: boolean;
+  externalId?: number;
+  externalDRef?: string;
+  externalReportNo?: string;
+  externalCertNo?: string;
+  externalCertType?: string;
+  externalPolish?: string;
+  externalSymmetry?: string;
+  externalFluorescence?: string;
+  externalDepthPercent?: number;
+  externalTablePercent?: number;
+  externalM1?: number;
+  externalM2?: number;
+  externalM3?: number;
+  externalRate?: number;
+  externalDiscount?: number;
+  externalLocation?: string;
+  externalNatts?: string;
+  externalMilky?: string;
+  externalEyeClean?: string;
+  externalBrowness?: string;
+  externalIsBuy?: boolean;
+  externalIsSpecialOffer?: boolean;
+  externalIsAuction?: boolean;
+  externalRap?: number;
+  externalUpdateTime?: string;
+  externalVideoUrl?: string;
+  externalDaylightUrl?: string;
+  externalBt?: string;
+  externalBc?: string;
+  externalWt?: string;
+  externalWc?: string;
+  externalSupplement1?: string;
+  externalSupplement10?: string;
+  externalSupplement11?: string;
+  externalSupplement12?: string;
+  externalSupplement13?: string;
 }
+
 
 export interface PaginationMeta {
   pagination: {
@@ -120,6 +156,8 @@ export interface StoneListParams {
   maxBudget?: number;
   certificate?: string[];
   type?: StoneType;
+  hasImages?: boolean;
+  hasVideo?: boolean;
 }
 
 export interface StonePayload {
@@ -132,13 +170,28 @@ export interface StonePayload {
   cutCode: string;
   certificateCode?: string;
   ratio: number;
-  lengthMm?: number;
-  widthMm?: number;
-  depthMm?: number;
   price: number;
   currency: string;
   isAvailable?: boolean;
   images?: StoneImageData[];
+  externalData?: StoneExternalDataPayload;
+}
+
+export interface StoneExternalDataPayload {
+  externalReportNo?: string;
+  externalDRef?: string;
+  externalCertNo?: string;
+  externalRate?: number;
+  externalDiscount?: number;
+  externalLocation?: string;
+  externalRemark?: string;
+  externalPolish?: string;
+  externalSymmetry?: string;
+  externalDepthPercent?: number;
+  externalTablePercent?: number;
+  externalBrowness?: string;
+  externalEyeClean?: string;
+  externalVideoUrl?: string;
 }
 
 export interface StoneImageData {
@@ -163,8 +216,45 @@ export interface StoneDetail extends StoneItem {
   images: StoneImageDetail[];
 }
 
+export interface ExternalStoneSyncRecord {
+  externalId: number;
+  localStoneId: number;
+  dRef?: string;
+  reportNo?: string;
+  shape?: string;
+  carat?: number;
+  color?: string;
+  clarity?: string;
+  cut?: string;
+  rate?: number;
+  location?: string;
+  certificate?: string;
+}
+
+export interface ExternalStoneSyncResponse {
+  importedCount: number;
+  list: ExternalStoneSyncRecord[];
+}
+
+export interface ExternalStoneSyncParams {
+  appid?: string;
+  secret?: string;
+  dSizeMin?: number;
+  dSizeMax?: number;
+  pageint?: number;
+  pagesize?: number;
+}
+
 export const getStoneDetail = async (id: number) => {
   const res = await backendInstance.get<{ data: StoneDetail }>(`/stones/${id}`);
+  return res.data.data;
+};
+
+export const syncExternalStones = async (params: ExternalStoneSyncParams) => {
+  const res = await backendInstance.post<{ data: ExternalStoneSyncResponse }>(
+    '/stones/external-sync',
+    params,
+  );
   return res.data.data;
 };
 

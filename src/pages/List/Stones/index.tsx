@@ -13,6 +13,7 @@ import {
   Dialog,
   Form,
   Input,
+  Textarea,
   Switch,
   MessagePlugin,
 } from 'tdesign-react';
@@ -22,9 +23,11 @@ import {
   selectStoneList,
   fetchStoneFilters,
   fetchStoneList,
+  setFilterValues,
   setPagination,
   resetStoneListState,
 } from 'modules/backend/stoneList';
+import type { StoneListFilterState } from 'modules/backend/stoneList';
 import {
   createStone,
   updateStone,
@@ -33,6 +36,9 @@ import {
   StonePayload,
   StoneDetail,
   StoneImageDetail,
+  StoneExternalDataPayload,
+  ExternalStoneSyncResponse,
+  syncExternalStones,
   getStoneDetail,
 } from 'services/backend';
 import CommonStyle from 'styles/common.module.less';
@@ -40,17 +46,42 @@ import style from './index.module.less';
 
 const { Option } = Select;
 const { FormItem } = Form;
+type MediaFilterKey = 'hasImages' | 'hasVideo';
 
 const StoneListPage = () => {
   const dispatch = useAppDispatch();
-  const { filters, list, loading, page, pageSize, total } = useAppSelector(selectStoneList);
+  const { filters, list, loading, page, pageSize, total, filterValues } = useAppSelector(selectStoneList);
   const [formVisible, setFormVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<StoneItem | null>(null);
 
   const [images, setImages] = useState<StoneImageDetail[]>([]);
+  const [syncDialogVisible, setSyncDialogVisible] = useState(false);
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [syncResult, setSyncResult] = useState<ExternalStoneSyncResponse | null>(null);
 
   const formRef = useRef<any>();
+  const syncFormRef = useRef<any>();
+
+  const normalizeInput = (value?: string) => {
+    if (!value) return undefined;
+    const trimmed = value.trim();
+    return trimmed === '' ? undefined : trimmed;
+  };
+
+  const handleMediaFilterToggle = (key: MediaFilterKey, value: boolean) => {
+    const payload: Partial<StoneListFilterState> = {
+      [key]: value ? true : undefined,
+    };
+    dispatch(setFilterValues(payload));
+    dispatch(
+      setPagination({
+        page: 1,
+        pageSize,
+      }),
+    );
+    dispatch(fetchStoneList());
+  };
 
   useEffect(() => {
     dispatch(fetchStoneFilters());
@@ -93,6 +124,40 @@ const StoneListPage = () => {
       MessagePlugin.error('删除失败');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleOpenSyncDialog = () => {
+    setSyncResult(null);
+    setSyncDialogVisible(true);
+  };
+
+  const handleSyncClose = () => {
+    setSyncDialogVisible(false);
+    setSyncResult(null);
+  };
+
+  const handleSyncSubmit = async (ctx: any) => {
+    if (ctx.validateResult !== true) return;
+    const values = syncFormRef.current?.getFieldsValue?.(true) as any;
+    const payload = {
+      appid: values.appid?.trim() || undefined,
+      secret: values.secret?.trim() || undefined,
+      dSizeMin: values.dSizeMin,
+      dSizeMax: values.dSizeMax,
+      pageint: values.pageint,
+      pagesize: values.pagesize,
+    };
+    try {
+      setSyncLoading(true);
+      const result = await syncExternalStones(payload);
+      setSyncResult(result);
+      MessagePlugin.success(`已导入 ${result.importedCount} 条石头`);
+      dispatch(fetchStoneList());
+    } catch (e) {
+      MessagePlugin.error('同步失败');
+    } finally {
+      setSyncLoading(false);
     }
   };
 
@@ -157,9 +222,6 @@ const StoneListPage = () => {
       cutCode: values.cutCode,
       certificateCode: values.certificateCode || undefined,
       ratio: Number(values.ratio),
-      lengthMm: values.lengthMm !== undefined ? Number(values.lengthMm) : undefined,
-      widthMm: values.widthMm !== undefined ? Number(values.widthMm) : undefined,
-      depthMm: values.depthMm !== undefined ? Number(values.depthMm) : undefined,
       price: Number(values.price),
       currency: values.currency,
       isAvailable: values.isAvailable,
@@ -177,6 +239,39 @@ const StoneListPage = () => {
       }));
 
     payload.images = normalizedImages;
+
+    const externalData: StoneExternalDataPayload = {
+      externalReportNo: normalizeInput(values.externalReportNo),
+      externalDRef: normalizeInput(values.externalDRef),
+      externalCertNo: normalizeInput(values.externalCertNo),
+      externalRate:
+        values.externalRate !== undefined && values.externalRate !== null
+          ? Number(values.externalRate)
+          : undefined,
+      externalDiscount:
+        values.externalDiscount !== undefined && values.externalDiscount !== null
+          ? Number(values.externalDiscount)
+          : undefined,
+      externalLocation: normalizeInput(values.externalLocation),
+      externalVideoUrl: normalizeInput(values.externalVideoUrl),
+      externalRemark: normalizeInput(values.externalRemark),
+      externalPolish: normalizeInput(values.externalPolish),
+      externalSymmetry: normalizeInput(values.externalSymmetry),
+      externalDepthPercent:
+        values.externalDepthPercent !== undefined && values.externalDepthPercent !== null
+          ? Number(values.externalDepthPercent)
+          : undefined,
+      externalTablePercent:
+        values.externalTablePercent !== undefined && values.externalTablePercent !== null
+          ? Number(values.externalTablePercent)
+          : undefined,
+      externalBrowness: normalizeInput(values.externalBrowness),
+      externalEyeClean: normalizeInput(values.externalEyeClean),
+    };
+
+    if (Object.values(externalData).some((value) => value !== undefined)) {
+      payload.externalData = externalData;
+    }
 
     try {
       setSaving(true);
@@ -250,6 +345,33 @@ const StoneListPage = () => {
       width: 120,
     },
     {
+      colKey: 'externalInfo',
+      title: '外部信息',
+      width: 220,
+      align: 'left' as const,
+      cell({ row }: any) {
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ fontWeight: 600 }}>
+              {row.externalReportNo || row.externalDRef || '—'}
+            </div>
+            <div
+              style={{
+                fontSize: 12,
+                color: '#6c6c6c',
+              }}
+            >
+              {row.externalRate ? `${row.externalRate.toFixed(2)} USD` : '暂无价格'}
+              {row.externalDiscount ? ` · ${row.externalDiscount}%` : ''}
+            </div>
+            <div style={{ fontSize: 12, color: '#6c6c6c' }}>
+              {row.externalLocation || '未知地点'}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
       colKey: 'price',
       title: '价格',
       width: 140,
@@ -261,21 +383,6 @@ const StoneListPage = () => {
       colKey: 'ratio',
       title: '比率',
       width: 100,
-    },
-    {
-      colKey: 'lengthMm',
-      title: '长 (mm)',
-      width: 120,
-    },
-    {
-      colKey: 'widthMm',
-      title: '宽 (mm)',
-      width: 120,
-    },
-    {
-      colKey: 'depthMm',
-      title: '深 (mm)',
-      width: 120,
     },
     {
       colKey: 'op',
@@ -298,14 +405,43 @@ const StoneListPage = () => {
 
   return (
     <div className={classnames(CommonStyle.pageWithPadding, CommonStyle.pageWithColor)}>
+      <div className={style.toolBar}>
+        <Row gutter={[24, 16]} align='middle'>
+          <Col>
+            <div className={style.filterItem}>
+              <span style={{ marginRight: 8 }}>仅含图片</span>
+              <Switch
+                checked={Boolean(filterValues.hasImages)}
+                size='small'
+                onChange={(value) => handleMediaFilterToggle('hasImages', value)}
+              />
+            </div>
+          </Col>
+          <Col>
+            <div className={style.filterItem}>
+              <span style={{ marginRight: 8 }}>仅含视频</span>
+              <Switch
+                checked={Boolean(filterValues.hasVideo)}
+                size='small'
+                onChange={(value) => handleMediaFilterToggle('hasVideo', value)}
+              />
+            </div>
+          </Col>
+        </Row>
+      </div>
       <Card
         style={{ marginTop: 16 }}
         title='石头列表'
         bordered={false}
         actions={
-          <Button theme='primary' onClick={handleAdd}>
-            新增石头
-          </Button>
+          <>
+            <Button theme='default' onClick={handleOpenSyncDialog}>
+              同步外部石头
+            </Button>
+            <Button theme='primary' onClick={handleAdd}>
+              新增石头
+            </Button>
+          </>
         }
       >
         <Table
@@ -339,6 +475,119 @@ const StoneListPage = () => {
           }}
         />
       </Card>
+
+      <Dialog
+        header='同步外部石头'
+        visible={syncDialogVisible}
+        confirmBtn={{ content: '拉取并导入', loading: syncLoading }}
+        cancelBtn='取消'
+        onClose={handleSyncClose}
+        onConfirm={() => syncFormRef.current?.submit?.()}
+        width='720px'
+      >
+        <Form
+          ref={syncFormRef}
+          labelWidth={120}
+          colon
+          onSubmit={handleSyncSubmit}
+        >
+          <Row gutter={[16, 16]}>
+            <Col span={6}>
+              <FormItem label='最小石码' name='dSizeMin'>
+                <InputNumber placeholder='0.5' min={0} step={0.01} />
+              </FormItem>
+            </Col>
+            <Col span={6}>
+              <FormItem label='最大石码' name='dSizeMax'>
+                <InputNumber placeholder='2' min={0} step={0.01} />
+              </FormItem>
+            </Col>
+            <Col span={6}>
+              <FormItem label='页码' name='pageint' initialData={1}>
+                <InputNumber min={1} step={1} />
+              </FormItem>
+            </Col>
+            <Col span={6}>
+              <FormItem label='每页条数' name='pagesize' initialData={10}>
+                <InputNumber min={1} step={1} />
+              </FormItem>
+            </Col>
+          </Row>
+
+          <Row gutter={[16, 16]}>
+            <Col span={12}>
+              <FormItem label='App ID' name='appid'>
+                <Input placeholder='可选，默认配置' clearable />
+              </FormItem>
+            </Col>
+            <Col span={12}>
+              <FormItem label='Secret' name='secret'>
+                <Input placeholder='可选，默认配置' clearable />
+              </FormItem>
+            </Col>
+          </Row>
+        </Form>
+
+        <div style={{ marginTop: 16 }}>
+          {syncResult ? (
+            <>
+              <p style={{ margin: 0, fontSize: 12, color: '#7f7f7f' }}>
+                本次导入 {syncResult.importedCount} 条，最近的几项：
+              </p>
+              <div
+                style={{
+                  marginTop: 8,
+                  maxHeight: 240,
+                  overflowY: 'auto',
+                }}
+              >
+                {syncResult.list.map((item) => (
+                  <div
+                    key={item.externalId}
+                    style={{
+                      borderBottom: '1px dashed #e5e5e5',
+                      padding: '8px 0',
+                    }}
+                  >
+                    <p style={{ margin: 0, fontWeight: 600 }}>
+                      {[
+                        item.shape,
+                        item.carat ? `${item.carat.toFixed(2)}ct` : null,
+                        item.color,
+                        item.clarity,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </p>
+                    <p
+                      style={{
+                        margin: '4px 0 0',
+                        fontSize: 12,
+                        color: '#6c6c6c',
+                      }}
+                    >
+                      折扣价：{item.rate ?? '-'} USD · 地点：{item.location ?? '未知'}
+                    </p>
+                    <p
+                      style={{
+                        margin: '2px 0 0',
+                        fontSize: 12,
+                        color: '#6c6c6c',
+                      }}
+                    >
+                      报告号：{item.reportNo ?? 'N/A'} · 外部编号：{item.dRef ?? 'N/A'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <p style={{ margin: 0, fontSize: 12, color: '#7f7f7f' }}>
+              支持调整参数后拉取真实石头数据，默认会使用后台配置的 AppID/Secret。
+            </p>
+          )}
+        </div>
+      </Dialog>
 
       <Dialog
         header={editing ? '编辑石头' : '新增石头'}
@@ -465,27 +714,146 @@ const StoneListPage = () => {
 
           <Row gutter={[16, 16]}>
             <Col span={6}>
-              <FormItem label='长 (mm)' name='lengthMm' initialData={editing?.lengthMm}>
-                <InputNumber min={0} />
-              </FormItem>
-            </Col>
-            <Col span={6}>
-              <FormItem label='宽 (mm)' name='widthMm' initialData={editing?.widthMm}>
-                <InputNumber min={0} />
-              </FormItem>
-            </Col>
-            <Col span={6}>
-              <FormItem label='深 (mm)' name='depthMm' initialData={editing?.depthMm}>
-                <InputNumber min={0} />
-              </FormItem>
-            </Col>
-            <Col span={6}>
               <FormItem label='证书' name='certificateCode' initialData={editing?.certificate}>
                 <Select clearable placeholder='请选择证书'>
                   {filters?.certificates?.map((item) => (
                     <Option key={item.code} value={item.code} label={item.label} />
                   ))}
                 </Select>
+              </FormItem>
+            </Col>
+          </Row>
+
+          <div className={style.sectionTitle}>外部字段（可选）</div>
+          <Row gutter={[16, 16]}>
+            <Col span={6}>
+              <FormItem
+                label='报告号'
+                name='externalReportNo'
+                initialData={editing?.externalReportNo}
+              >
+                <Input placeholder='675527487' />
+              </FormItem>
+            </Col>
+            <Col span={6}>
+              <FormItem
+                label='外部编号'
+                name='externalDRef'
+                initialData={editing?.externalDRef}
+              >
+                <Input placeholder='sz067' />
+              </FormItem>
+            </Col>
+            <Col span={6}>
+              <FormItem
+                label='证书号'
+                name='externalCertNo'
+                initialData={editing?.externalCertNo}
+              >
+                <Input placeholder='IGI 675527487' />
+              </FormItem>
+            </Col>
+            <Col span={6}>
+              <FormItem
+                label='地点'
+                name='externalLocation'
+                initialData={editing?.externalLocation}
+              >
+                <Input placeholder='深圳' />
+              </FormItem>
+            </Col>
+          </Row>
+          <Row gutter={[16, 16]}>
+            <Col span={6}>
+              <FormItem
+                label='视频链接'
+                name='externalVideoUrl'
+                initialData={editing?.externalVideoUrl}
+              >
+                <Input placeholder='https://example.com/video.mp4' />
+              </FormItem>
+            </Col>
+          </Row>
+          <Row gutter={[16, 16]}>
+            <Col span={6}>
+              <FormItem label='外部价格' name='externalRate' initialData={editing?.externalRate}>
+                <InputNumber min={0} step={0.01} />
+              </FormItem>
+            </Col>
+            <Col span={6}>
+              <FormItem
+                label='折扣'
+                name='externalDiscount'
+                initialData={editing?.externalDiscount}
+              >
+                <InputNumber min={0} step={0.01} />
+              </FormItem>
+            </Col>
+            <Col span={6}>
+              <FormItem
+                label='抛光'
+                name='externalPolish'
+                initialData={editing?.externalPolish}
+              >
+                <Input placeholder='EX / VG' />
+              </FormItem>
+            </Col>
+            <Col span={6}>
+              <FormItem
+                label='对称'
+                name='externalSymmetry'
+                initialData={editing?.externalSymmetry}
+              >
+                <Input placeholder='EX / VG' />
+              </FormItem>
+            </Col>
+          </Row>
+          <Row gutter={[16, 16]}>
+            <Col span={6}>
+              <FormItem
+                label='纵深%'
+                name='externalDepthPercent'
+                initialData={editing?.externalDepthPercent}
+              >
+                <InputNumber min={0} step={0.01} />
+              </FormItem>
+            </Col>
+            <Col span={6}>
+              <FormItem
+                label='台宽%'
+                name='externalTablePercent'
+                initialData={editing?.externalTablePercent}
+              >
+                <InputNumber min={0} step={0.01} />
+              </FormItem>
+            </Col>
+            <Col span={6}>
+              <FormItem
+                label='肉眼净度'
+                name='externalEyeClean'
+                initialData={editing?.externalEyeClean}
+              >
+                <Input placeholder='Eye Clean' />
+              </FormItem>
+            </Col>
+            <Col span={6}>
+              <FormItem
+                label='咖'
+                name='externalBrowness'
+                initialData={editing?.externalBrowness}
+              >
+                <Input placeholder='Browness' />
+              </FormItem>
+            </Col>
+          </Row>
+          <Row gutter={[16, 16]}>
+            <Col span={12}>
+              <FormItem
+                label='备注'
+                name='externalRemark'
+                initialData={editing?.externalRemark}
+              >
+                <Textarea placeholder='其他备注' rows={2} autoSize />
               </FormItem>
             </Col>
           </Row>
