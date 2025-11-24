@@ -7,6 +7,7 @@ import svgr from '@honkhonk/vite-plugin-svgr';
 const CWD = process.cwd();
 
 const alias = {
+  '@': path.resolve(__dirname, './src'),
   assets: path.resolve(__dirname, './src/assets'),
   components: path.resolve(__dirname, './src/components'),
   configs: path.resolve(__dirname, './src/configs'),
@@ -22,55 +23,54 @@ const alias = {
 };
 
 export default defineConfig(({ mode }) => {
-  const { VITE_BASE_URL } = loadEnv(mode, CWD);
-
+  const env = loadEnv(mode, CWD);
+  
   return {
-    base: VITE_BASE_URL,
+    base: env.VITE_BASE_URL,
     resolve: {
       alias,
     },
-
     css: {
       preprocessorOptions: {
         less: {
           modifyVars: {
             // 如需自定义组件其他 token, 在此处配置
           },
+          javascriptEnabled: true,
         },
       },
     },
-
     plugins: [
       svgr(),
       react(),
-      mode === 'mock' &&
-        viteMockServe({
-          mockPath: './mock',
-          localEnabled: true,
-        }),
-    ],
-
+      mode === 'mock' && viteMockServe({
+        mockPath: './mock',
+        localEnabled: true,
+        watchFiles: true,
+      }),
+    ].filter(Boolean),
     build: {
       cssCodeSplit: false,
+      sourcemap: mode !== 'production',
     },
-
     server: {
       host: '0.0.0.0',
       port: 3003,
+      open: false,
       proxy: {
         '/api': {
-          // 用于开发环境下的转发请求
-          // 更多请参考：https://vitejs.dev/config/#server-proxy
           target: 'https://service-exndqyuk-1257786608.gz.apigw.tencentcs.com',
           changeOrigin: true,
+          secure: false,
         },
       },
+      cors: true,
     },
-
     test: {
       globals: true,
-      environment: 'node',
+      environment: 'jsdom',
       alias,
+      setupFiles: './src/test/setup.ts',
     },
   };
 });
