@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const backendInstance = axios.create({
-  baseURL: 'http://localhost:3000',
+  baseURL: import.meta.env.VITE_ADMIN_BACKEND_BASE_URL || 'http://localhost:3000',
   timeout: 5 * 60 * 1000, // 5 分钟，避免同步超时
   maxContentLength: 200 * 1024 * 1024, // 支持大响应体（200MB）
   maxBodyLength: 200 * 1024 * 1024,
