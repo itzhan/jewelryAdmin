@@ -32,11 +32,153 @@ import {
   getProductDetail,
 } from 'services/backend';
 import CommonStyle from 'styles/common.module.less';
+import { DndContext, closestCenter, DragEndEvent } from '@dnd-kit/core';
+import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 import { FormInstanceFunctions, SubmitContext } from 'tdesign-react/es/form/type';
 
 const { Option } = Select;
 const { FormItem } = Form;
+
+// Sortable image row component
+interface SortableImageRowProps {
+  id: string;
+  img: ProductImageDetail;
+  index: number;
+  onUpdateImage: (index: number, field: keyof ProductImageDetail, value: any) => void;
+  onDeleteImage: (index: number) => void;
+  onSetPrimaryImage: (index: number) => void;
+}
+
+const SortableImageRow: React.FC<SortableImageRowProps> = ({
+  id,
+  img,
+  index,
+  onUpdateImage,
+  onDeleteImage,
+  onSetPrimaryImage,
+}) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        ...style,
+        marginBottom: 16,
+        padding: '16px',
+        border: '1px solid #e7e7e7',
+        borderRadius: '8px',
+        backgroundColor: isDragging ? '#f9f9f9' : '#fff',
+        boxShadow: isDragging ? '0 4px 12px rgba(0,0,0,0.15)' : '0 2px 4px rgba(0,0,0,0.05)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        {/* 拖拽手柄 */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'grab',
+            padding: '4px',
+            color: '#999',
+          }}
+          {...attributes}
+          {...listeners}
+        >
+          <svg width='24' height='24' viewBox='0 0 24 24' fill='currentColor'>
+            <path d='M9 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 7a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 7a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6-14a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 7a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 7a2 2 0 1 0 0 4 2 2 0 0 0 0-4z' />
+          </svg>
+        </div>
+
+        {/* 序号 */}
+        <div
+          style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%',
+            backgroundColor: img.isPrimary ? '#0052d9' : '#f0f0f0',
+            color: img.isPrimary ? '#fff' : '#666',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontWeight: 600,
+            fontSize: '14px',
+            flexShrink: 0,
+          }}
+        >
+          {index + 1}
+        </div>
+
+        {/* 图片预览 */}
+        <div style={{ flexShrink: 0 }}>
+          {img.url ? (
+            <Image
+              src={img.url}
+              style={{
+                width: '100px',
+                height: '100px',
+                objectFit: 'cover',
+                borderRadius: '6px',
+                border: '1px solid #e7e7e7',
+              }}
+              fit='cover'
+            />
+          ) : (
+            <div
+              style={{
+                width: '100px',
+                height: '100px',
+                border: '2px dashed #ddd',
+                borderRadius: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#bbb',
+                fontSize: '12px',
+                backgroundColor: '#fafafa',
+              }}
+            >
+              无图片
+            </div>
+          )}
+        </div>
+
+        {/* URL 输入框 */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <Input
+            value={img.url}
+            placeholder='请输入图片 URL'
+            onChange={(value) => onUpdateImage(index, 'url', value)}
+            style={{ width: '100%' }}
+          />
+        </div>
+
+        {/* 主图标记 */}
+        <div style={{ flexShrink: 0 }}>
+          <Radio checked={!!img.isPrimary} onChange={() => onSetPrimaryImage(index)}>
+            主图
+          </Radio>
+        </div>
+
+        {/* 删除按钮 */}
+        <div style={{ flexShrink: 0 }}>
+          <Button theme='danger' variant='outline' size='small' onClick={() => onDeleteImage(index)}>
+            删除
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const ProductListPage = () => {
   const [categories, setCategories] = useState<ProductCategory[]>([]);
@@ -151,9 +293,7 @@ const ProductListPage = () => {
       .filter((img) => img.url)
       .map((img, index) => ({
         imageUrl: img.url,
-        altText: img.alt || '',
-        badge: img.badge || undefined,
-        aspectRatio: img.aspect || 'square',
+        altText: '',
         sortOrder: typeof img.sortOrder === 'number' ? img.sortOrder : index,
         isPrimary: !!img.isPrimary,
       }));
@@ -201,9 +341,6 @@ const ProductListPage = () => {
         ...prev,
         {
           url: '',
-          alt: '',
-          badge: '',
-          aspect: 'square',
           sortOrder: nextIndex,
           isPrimary: prev.length === 0,
         },
@@ -239,6 +376,19 @@ const ProductListPage = () => {
 
   const handleSetPrimaryImage = (index: number) => {
     setImages((prev) => prev.map((img, i) => ({ ...img, isPrimary: i === index })));
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    setImages((prev) => {
+      const oldIndex = prev.findIndex((_, i) => `image-${i}` === active.id);
+      const newIndex = prev.findIndex((_, i) => `image-${i}` === over.id);
+      const reordered = arrayMove(prev, oldIndex, newIndex);
+      // Update sortOrder based on new position
+      return reordered.map((img, i) => ({ ...img, sortOrder: i }));
+    });
   };
 
   const columns = [
@@ -508,89 +658,23 @@ const ProductListPage = () => {
           <FormItem label='图片管理'>
             <div style={{ width: '100%' }}>
               {images.length === 0 ? (
-                <div style={{ marginBottom: 12, color: '#999' }}>暂无图片，请点击下方“新增图片”按钮添加。</div>
+                <div style={{ marginBottom: 12, color: '#999' }}>暂无图片，请点击下方"新增图片"按钮添加。</div>
               ) : (
-                images.map((img, index) => (
-                  <Row
-                    key={index}
-                    gutter={[16, 8]}
-                    style={{
-                      marginBottom: 12,
-                      paddingBottom: 12,
-                      borderBottom: '1px dashed #eee',
-                    }}
-                  >
-                    <Col span={3}>
-                      {img.url ? (
-                        <Image src={img.url} style={{ width: '100%', height: 80, objectFit: 'cover' }} fit='cover' />
-                      ) : (
-                        <div
-                          style={{
-                            width: '100%',
-                            height: 80,
-                            border: '1px dashed #ddd',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: '#bbb',
-                            fontSize: 12,
-                          }}
-                        >
-                          无预览
-                        </div>
-                      )}
-                    </Col>
-                    <Col span={5}>
-                      <Input
-                        value={img.url}
-                        placeholder='图片 URL'
-                        onChange={(value) => handleUpdateImage(index, 'url', value)}
+                <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                  <SortableContext items={images.map((_, i) => `image-${i}`)} strategy={verticalListSortingStrategy}>
+                    {images.map((img, index) => (
+                      <SortableImageRow
+                        key={`image-${index}`}
+                        id={`image-${index}`}
+                        img={img}
+                        index={index}
+                        onUpdateImage={handleUpdateImage}
+                        onDeleteImage={handleDeleteImage}
+                        onSetPrimaryImage={handleSetPrimaryImage}
                       />
-                    </Col>
-                    <Col span={4}>
-                      <Input
-                        value={img.alt}
-                        placeholder='ALT 文本'
-                        onChange={(value) => handleUpdateImage(index, 'alt', value)}
-                      />
-                    </Col>
-                    <Col span={4}>
-                      <Input
-                        value={img.badge}
-                        placeholder='角标，如 NEW'
-                        onChange={(value) => handleUpdateImage(index, 'badge', value)}
-                      />
-                    </Col>
-                    <Col span={3}>
-                      <Select
-                        value={img.aspect || 'square'}
-                        onChange={(value) => handleUpdateImage(index, 'aspect', value as ProductImageDetail['aspect'])}
-                      >
-                        <Option value='square' label='方形' />
-                        <Option value='portrait' label='竖图' />
-                      </Select>
-                    </Col>
-                    <Col span={2}>
-                      <InputNumber
-                        min={0}
-                        value={typeof img.sortOrder === 'number' ? img.sortOrder : index}
-                        onChange={(value) =>
-                          handleUpdateImage(index, 'sortOrder', typeof value === 'number' ? value : undefined)
-                        }
-                      />
-                    </Col>
-                    <Col span={2}>
-                      <Radio checked={!!img.isPrimary} onChange={() => handleSetPrimaryImage(index)}>
-                        主图
-                      </Radio>
-                    </Col>
-                    <Col span={1}>
-                      <Button theme='danger' variant='text' onClick={() => handleDeleteImage(index)}>
-                        删除
-                      </Button>
-                    </Col>
-                  </Row>
-                ))
+                    ))}
+                  </SortableContext>
+                </DndContext>
               )}
               <Button theme='primary' variant='outline' size='small' onClick={handleAddImage}>
                 新增图片

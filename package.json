@@ -40,10 +40,13 @@
     "prettier": "^2.5.1",
     "typescript": "^4.8.4",
     "vite": "^2.9.15",
-    "vitest": "^1.5.4",
-    "vite-plugin-mock": "^2.9.6"
+    "vite-plugin-mock": "^2.9.6",
+    "vitest": "^1.5.4"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@reduxjs/toolkit": "^1.8.5",
     "axios": "^1.2.0",
     "axios-jsonp": "^1.0.4",
