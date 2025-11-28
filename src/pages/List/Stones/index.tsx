@@ -38,8 +38,13 @@ import {
   StoneImageDetail,
   StoneExternalDataPayload,
   ExternalStoneSyncResponse,
+  ExternalStoneSyncAllResponse,
   syncExternalStones,
+  syncAllExternalStones,
   getStoneDetail,
+  MissingShape,
+  getMissingShapes,
+  batchCreateShapes,
 } from 'services/backend';
 import CommonStyle from 'styles/common.module.less';
 import style from './index.module.less';
@@ -60,8 +65,20 @@ const StoneListPage = () => {
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncResult, setSyncResult] = useState<ExternalStoneSyncResponse | null>(null);
 
+  const [syncAllDialogVisible, setSyncAllDialogVisible] = useState(false);
+  const [syncAllLoading, setSyncAllLoading] = useState(false);
+  const [syncAllResult, setSyncAllResult] = useState<ExternalStoneSyncAllResponse | null>(null);
+
+  // 缺失形状检查相关状态
+  const [missingShapesDialogVisible, setMissingShapesDialogVisible] = useState(false);
+  const [missingShapes, setMissingShapes] = useState<MissingShape[]>([]);
+  const [selectedMissingShapes, setSelectedMissingShapes] = useState<string[]>([]);
+  const [loadingMissingShapes, setLoadingMissingShapes] = useState(false);
+  const [creatingShapes, setCreatingShapes] = useState(false);
+
   const formRef = useRef<any>();
   const syncFormRef = useRef<any>();
+  const syncAllFormRef = useRef<any>();
 
   const normalizeInput = (value?: string) => {
     if (!value) return undefined;
@@ -158,6 +175,97 @@ const StoneListPage = () => {
       MessagePlugin.error('同步失败');
     } finally {
       setSyncLoading(false);
+    }
+  };
+
+  const handleOpenSyncAllDialog = () => {
+    setSyncAllResult(null);
+    setSyncAllDialogVisible(true);
+  };
+
+  const handleSyncAllClose = () => {
+    setSyncAllDialogVisible(false);
+    setSyncAllResult(null);
+  };
+
+  // 检查缺失的形状
+  const handleCheckMissingShapes = async () => {
+    try {
+      setLoadingMissingShapes(true);
+      const shapes = await getMissingShapes();
+      setMissingShapes(shapes);
+      setSelectedMissingShapes([]); // 清空选择
+      setMissingShapesDialogVisible(true);
+
+      if (shapes.length === 0) {
+        MessagePlugin.success('没有发现缺失的形状！');
+      } else {
+        MessagePlugin.info(`发现 ${shapes.length} 个缺失的形状`);
+      }
+    } catch (error: any) {
+      MessagePlugin.error(`检查失败: ${error.message || '未知错误'}`);
+    } finally {
+      setLoadingMissingShapes(false);
+    }
+  };
+
+  // 批量创建选中的形状
+  const handleCreateSelectedShapes = async () => {
+    if (selectedMissingShapes.length === 0) {
+      MessagePlugin.warning('请至少选择一个形状');
+      return;
+    }
+
+    try {
+      setCreatingShapes(true);
+      const shapesToCreate = missingShapes
+        .filter((shape) => selectedMissingShapes.includes(shape.code))
+        .map((shape) => ({ code: shape.code, displayName: shape.displayName }));
+
+      const created = await batchCreateShapes(shapesToCreate);
+      MessagePlugin.success(`成功创建 ${created.length} 个形状！`);
+
+      // 刷新缺失形状列表
+      const updatedShapes = await getMissingShapes();
+      setMissingShapes(updatedShapes);
+      setSelectedMissingShapes([]);
+
+      if (updatedShapes.length === 0) {
+        setMissingShapesDialogVisible(false);
+      }
+    } catch (error: any) {
+      MessagePlugin.error(`创建失败: ${error.message || '未知错误'}`);
+    } finally {
+      setCreatingShapes(false);
+    }
+  };
+
+  const handleMissingShapesClose = () => {
+    setMissingShapesDialogVisible(false);
+    setMissingShapes([]);
+    setSelectedMissingShapes([]);
+  };
+
+  const handleSyncAllSubmit = async (ctx: any) => {
+    if (ctx.validateResult !== true) return;
+    const values = syncAllFormRef.current?.getFieldsValue?.(true) as any;
+    const payload = {
+      appid: values.appid?.trim() || undefined,
+      secret: values.secret?.trim() || undefined,
+      pagesize: values.pagesize,
+    };
+    try {
+      setSyncAllLoading(true);
+      const result = await syncAllExternalStones(payload);
+      setSyncAllResult(result);
+      MessagePlugin.success(
+        `同步完成！共处理 ${result.totalProcessed} 条数据 (新增 ${result.created}, 更新 ${result.updated})`
+      );
+      dispatch(fetchStoneList());
+    } catch (e) {
+      MessagePlugin.error('同步失败');
+    } finally {
+      setSyncAllLoading(false);
     }
   };
 
@@ -438,6 +546,12 @@ const StoneListPage = () => {
             <Button theme='default' onClick={handleOpenSyncDialog}>
               同步外部石头
             </Button>
+            <Button theme='warning' onClick={handleOpenSyncAllDialog}>
+              同步所有石头
+            </Button>
+            <Button theme='default' onClick={handleCheckMissingShapes} loading={loadingMissingShapes}>
+              检查缺失形状
+            </Button>
             <Button theme='primary' onClick={handleAdd}>
               新增石头
             </Button>
@@ -587,6 +701,147 @@ const StoneListPage = () => {
             </p>
           )}
         </div>
+      </Dialog>
+
+      <Dialog
+        header='同步所有外部石头'
+        visible={syncAllDialogVisible}
+        confirmBtn={{ content: '开始同步', loading: syncAllLoading }}
+        cancelBtn='取消'
+        onClose={handleSyncAllClose}
+        onConfirm={() => syncAllFormRef.current?.submit?.()}
+        width='600px'
+      >
+        <Form
+          ref={syncAllFormRef}
+          labelWidth={120}
+          colon
+          onSubmit={handleSyncAllSubmit}
+        >
+          <Row gutter={[16, 16]}>
+            <Col span={12}>
+              <FormItem label='App ID' name='appid'>
+                <Input placeholder='可选，默认配置' clearable />
+              </FormItem>
+            </Col>
+            <Col span={12}>
+              <FormItem label='Secret' name='secret'>
+                <Input placeholder='可选，默认配置' clearable />
+              </FormItem>
+            </Col>
+          </Row>
+          <Row gutter={[16, 16]}>
+            <Col span={12}>
+              <FormItem label='每页条数' name='pagesize' initialData={10000}>
+                <InputNumber min={1} max={10000} step={1} />
+              </FormItem>
+            </Col>
+          </Row>
+        </Form>
+
+        <div style={{ marginTop: 16 }}>
+          {syncAllLoading && (
+            <div style={{ marginBottom: 16, padding: 12, background: '#f0f9ff', borderRadius: 4, border: '1px solid #91d5ff' }}>
+              <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#0050b3' }}>
+                ⏳ 同步进行中...
+              </p>
+              <p style={{ margin: '8px 0 0', fontSize: 12, color: '#096dd9' }}>
+                正在拉取数据，此过程可能需要数分钟，请勿关闭窗口
+              </p>
+            </div>
+          )}
+          {syncAllResult ? (
+            <>
+              <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#333' }}>
+                ✅ 同步完成！
+              </p>
+              <div style={{ marginTop: 8, fontSize: 13, color: '#666' }}>
+                <p style={{ margin: '4px 0' }}>📄 总页数: {syncAllResult.totalPages}</p>
+                <p style={{ margin: '4px 0' }}>✔️ 已处理页数: {syncAllResult.processedPages}</p>
+                <p style={{ margin: '4px 0' }}>📊 总处理数据: {syncAllResult.totalProcessed} 条</p>
+                <p style={{ margin: '4px 0', color: '#52c41a' }}>➕ 新增: {syncAllResult.created} 条</p>
+                <p style={{ margin: '4px 0', color: '#1890ff' }}>🔄 更新: {syncAllResult.updated} 条</p>
+              </div>
+            </>
+          ) : !syncAllLoading && (
+            <div style={{ fontSize: 12, color: '#7f7f7f' }}>
+              <p style={{ margin: 0 }}>
+                💡 此功能会自动计算总记录数(total/pagesize)，然后分页并行拉取所有外部石头数据。
+              </p>
+              <p style={{ margin: '8px 0 0' }}>
+                📦 每页最多 10000 条数据，最多 3 个并发请求。
+              </p>
+              <p style={{ margin: '8px 0 0', color: '#ff4d4f' }}>
+                ⚠️ 注意：数据量大时可能需要较长时间（例如24万条数据约需5-10分钟），请耐心等待！
+              </p>
+            </div>
+          )}
+        </div>
+      </Dialog>
+
+      {/* 缺失形状检查弹窗 */}
+      <Dialog
+        header='缺失形状检查'
+        visible={missingShapesDialogVisible}
+        confirmBtn={{ content: '创建选中的形状', loading: creatingShapes, disabled: selectedMissingShapes.length === 0 }}
+        cancelBtn='关闭'
+        onClose={handleMissingShapesClose}
+        onConfirm={handleCreateSelectedShapes}
+        width='800px'
+      >
+        {missingShapes.length === 0 ? (
+          <div style={{ padding: '20px', textAlign: 'center', color: '#52c41a' }}>
+            <p style={{ fontSize: 16, fontWeight: 600 }}>✅ 所有形状都已存在，没有缺失的形状！</p>
+          </div>
+        ) : (
+          <>
+            <div style={{ marginBottom: 16 }}>
+              <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#333' }}>
+                📋 发现 {missingShapes.length} 个缺失的形状
+              </p>
+              <p style={{ margin: '8px 0 0', fontSize: 12, color: '#666' }}>
+                这些形状在石头数据中使用，但 shape 表中不存在。请选择需要添加的形状。
+              </p>
+            </div>
+            <Table
+              data={missingShapes}
+              columns={[
+                {
+                  colKey: 'selection',
+                  type: 'multiple',
+                  width: 50,
+                },
+                {
+                  colKey: 'code',
+                  title: '形状代码',
+                  width: 150,
+                },
+                {
+                  colKey: 'displayName',
+                  title: '显示名称',
+                  width: 200,
+                },
+                {
+                  colKey: 'count',
+                  title: '使用次数',
+                  width: 100,
+                  cell: ({ row }: any) => (
+                    <span style={{ color: '#1890ff', fontWeight: 600 }}>{row.count}</span>
+                  ),
+                },
+              ]}
+              rowKey='code'
+              selectedRowKeys={selectedMissingShapes}
+              onSelectChange={(value: string[]) => setSelectedMissingShapes(value)}
+              pagination={false}
+              maxHeight={400}
+              bordered
+            />
+            <div style={{ marginTop: 12, fontSize: 12, color: '#999' }}>
+              💡 提示：选择需要添加的形状后，点击"创建选中的形状"按钮即可批量创建。
+            </div>
+          </>
+        )}
       </Dialog>
 
       <Dialog

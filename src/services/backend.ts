@@ -236,6 +236,14 @@ export interface ExternalStoneSyncResponse {
   list: ExternalStoneSyncRecord[];
 }
 
+export interface ExternalStoneSyncAllResponse {
+  totalPages: number;
+  processedPages: number;
+  totalProcessed: number;
+  created: number;
+  updated: number;
+}
+
 export interface ExternalStoneSyncParams {
   appid?: string;
   secret?: string;
@@ -255,6 +263,32 @@ export const syncExternalStones = async (params: ExternalStoneSyncParams) => {
     '/stones/external-sync',
     params,
   );
+  return res.data.data;
+};
+
+export const syncAllExternalStones = async (params: Partial<ExternalStoneSyncParams>) => {
+  const res = await backendInstance.post<{ data: ExternalStoneSyncAllResponse }>(
+    '/stones/external-sync-all',
+    params,
+  );
+  return res.data.data;
+};
+
+// 获取缺失的形状列表
+export interface MissingShape {
+  code: string;
+  displayName: string;
+  count: number;
+}
+
+export const getMissingShapes = async () => {
+  const res = await backendInstance.get<{ data: MissingShape[] }>('/stones/shapes/missing');
+  return res.data.data;
+};
+
+// 批量创建形状
+export const batchCreateShapes = async (shapes: Array<{ code: string; displayName: string }>) => {
+  const res = await backendInstance.post<{ data: any[] }>('/stones/shapes/batch', { shapes });
   return res.data.data;
 };
 
